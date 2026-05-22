@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yahoo!ニュース ─ 一覧</title>
+<style>
+  :root {
+    --fg: #111;
+    --fg-mute: #777;
+    --fg-faint: #aaa;
+    --line: #d8d8d8;
+    --line-faint: #ececec;
+    --bg: #fafafa;
+    --hover: #f0f0f0;
+    --accent: #111;
+    --error: #8a1a1a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 24px 20px 60px;
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--fg);
+    margin-bottom: 0;
+  }
+  h1 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .status {
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 11px;
+    color: var(--fg-mute);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .refresh {
+    font-family: inherit;
+    font-size: 11px;
+    color: var(--fg);
+    background: transparent;
+    border: 1px solid var(--fg);
+    padding: 2px 8px;
+    cursor: pointer;
+    border-radius: 0;
+  }
+  .refresh:hover { background: var(--fg); color: var(--bg); }
+  .refresh:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  nav.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 0;
+  }
+  .tab {
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--fg-mute);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 10px 14px;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+  .tab:hover { color: var(--fg); }
+  .tab.active {
+    color: var(--fg);
+    border-bottom: 2px solid var(--fg);
+    font-weight: 600;
+  }
+
+  ol.list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .item {
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    gap: 12px;
+    align-items: baseline;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--line-faint);
+  }
+  .item:hover { background: var(--hover); }
+  .num {
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 11px;
+    color: var(--fg-faint);
+    text-align: right;
+  }
+  .item a {
+    color: var(--fg);
+    text-decoration: none;
+    display: block;
+  }
+  .item a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .title {
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .time {
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 10.5px;
+    color: var(--fg-mute);
+    white-space: nowrap;
+  }
+
+  .state {
+    padding: 30px 4px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--fg-mute);
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  }
+  .state.err { color: var(--error); }
+
+  footer {
+    margin-top: 30px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    font-size: 10.5px;
+    color: var(--fg-faint);
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    display: flex;
+    justify-content: space-between;
+  }
+  footer a { color: var(--fg-mute); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  @media (max-width: 520px) {
+    .wrap { padding: 16px 12px 40px; }
+    .item { grid-template-columns: 28px 1fr auto; gap: 8px; }
+    .tab { padding: 8px 10px; font-size: 11.5px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>YAHOO! NEWS / TOPICS</h1>
+    <div class="status">
+      <span id="updated">―</span>
+      <button class="refresh" id="refreshBtn" onclick="loadCurrent()">更新</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <ol class="list" id="list">
+    <li class="state">読み込み中…</li>
+  </ol>
+
+  <footer>
+    <span>source: news.yahoo.co.jp/rss</span>
+    <a href="https://news.yahoo.co.jp/" target="_blank" rel="noopener">news.yahoo.co.jp ↗</a>
+  </footer>
+</div>
+
+<script>
+  const CATEGORIES = [
+    { key: 'top-picks',     label: '主要' },
+    { key: 'domestic',      label: '国内' },
+    { key: 'world',         label: '国際' },
+    { key: 'business',      label: '経済' },
+    { key: 'entertainment', label: 'エンタメ' },
+    { key: 'sports',        label: 'スポーツ' },
+    { key: 'it',            label: 'IT' },
+    { key: 'science',       label: '科学' },
+    { key: 'local',         label: '地域' }
+  ];
+
+  // CORS proxy 候補（順次フォールバック）
+  const PROXIES = [
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    url => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`
+  ];
+
+  let current = 'top-picks';
+  let loading = false;
+
+  function renderTabs() {
+    const tabs = document.getElementById('tabs');
+    tabs.innerHTML = '';
+    CATEGORIES.forEach(c => {
+      const btn = document.createElement('button');
+      btn.className = 'tab' + (c.key === current ? ' active' : '');
+      btn.textContent = c.label;
+      btn.onclick = () => {
+        if (loading || current === c.key) return;
+        current = c.key;
+        renderTabs();
+        loadCurrent();
+      };
+      tabs.appendChild(btn);
+    });
+  }
+
+  async function fetchWithFallback(url) {
+    let lastErr;
+    for (const build of PROXIES) {
+      try {
+        const res = await fetch(build(url), { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const text = await res.text();
+        if (!text || text.length < 50) throw new Error('empty');
+        return text;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error('all proxies failed');
+  }
+
+  async function loadCurrent() {
+    if (loading) return;
+    loading = true;
+    document.getElementById('refreshBtn').disabled = true;
+    const list = document.getElementById('list');
+    list.innerHTML = '<li class="state">読み込み中…</li>';
+
+    const rssUrl = `https://news.yahoo.co.jp/rss/topics/${current}.xml`;
+    try {
+      const xmlText = await fetchWithFallback(rssUrl);
+      const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
+      if (xml.querySelector('parsererror')) throw new Error('XML parse error');
+      const items = Array.from(xml.querySelectorAll('item'));
+      if (items.length === 0) throw new Error('記事が見つかりません');
+
+      list.innerHTML = '';
+      items.forEach((it, i) => {
+        const title = (it.querySelector('title')?.textContent || '').trim();
+        const link  = (it.querySelector('link')?.textContent  || '#').trim();
+        const pub   = (it.querySelector('pubDate')?.textContent || '').trim();
+
+        const li = document.createElement('li');
+        li.className = 'item';
+        li.innerHTML = `
+          <span class="num">${String(i + 1).padStart(2, '0')}</span>
+          <a href="${escapeAttr(link)}" target="_blank" rel="noopener">
+            <span class="title">${escapeHtml(title)}</span>
+          </a>
+          <span class="time">${formatDate(pub)}</span>
+        `;
+        list.appendChild(li);
+      });
+
+      document.getElementById('updated').textContent =
+        '取得 ' + new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch (e) {
+      list.innerHTML = `<li class="state err">取得に失敗しました（${escapeHtml(e.message)}）<br>時間をおいて「更新」を押してください。</li>`;
+      document.getElementById('updated').textContent = 'error';
+    } finally {
+      loading = false;
+      document.getElementById('refreshBtn').disabled = false;
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+
+  function formatDate(s) {
+    if (!s) return '';
+    const d = new Date(s);
+    if (isNaN(d)) return s;
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    if (sameDay) {
+      return d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    }
+    return d.toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  renderTabs();
+  loadCurrent();
+</script>
+</body>
+</html>
